@@ -59,7 +59,7 @@ This project focuses on building a predictive model to assess the credit risk as
 ---
 
 ## Model Comparison Results
-
+![Model Comparison Results](/Model Comparison Results.png)
 
 ## Installation
 
