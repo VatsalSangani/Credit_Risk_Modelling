@@ -59,7 +59,7 @@ This project focuses on building a predictive model to assess the credit risk as
 ---
 
 ## Model Comparison Results
-![Alt Text]()
+![Alt Text](https://github.com/VatsalSangani/Credit_Risk_Modelling/blob/main/Model%20Comparison%20Results.png)
 
 ## Installation
 
