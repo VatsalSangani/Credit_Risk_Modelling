@@ -61,6 +61,9 @@ This project focuses on building a predictive model to assess the credit risk as
 ## Model Comparison Results
 ![Alt Text](https://github.com/VatsalSangani/Credit_Risk_Modelling/blob/main/Model%20Comparison%20Results.png)
 
+## Deployment on HF Space
+[Click here to test the new deployed model](https://huggingface.co/spaces/brendvat/credit_risk_modelling)
+
 ## Installation
 
 To set up the project locally:
