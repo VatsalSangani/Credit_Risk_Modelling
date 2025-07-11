@@ -20,7 +20,7 @@ jobs:
 
     - name: 🚀 Deploy to EC2
       run: |
-        ssh -o StrictHostKeyChecking=no deploy@13.42.17.17 << EOF
+        ssh -o StrictHostKeyChecking=no deploy@13.42.17.17 <<EOF
           cd /home/deploy
 
           # If repo doesn't exist, clone it
@@ -34,15 +34,16 @@ jobs:
           git pull origin main
 
           # Ensure current user is in the docker group
-          sudo usermod -aG docker \$USER
+          sudo usermod -aG docker $USER
 
           # Clean up existing Docker containers, images, volumes
-          docker stop \$(docker ps -aq) 2>/dev/null || true
-          docker rm \$(docker ps -aq) 2>/dev/null || true
-          docker rmi -f \$(docker images -q) 2>/dev/null || true
+          docker stop $(docker ps -aq) 2>/dev/null || true
+          docker rm $(docker ps -aq) 2>/dev/null || true
+          docker rmi -f $(docker images -q) 2>/dev/null || true
           docker volume prune -f
 
           # Rebuild and run the container
           docker build -t credit-risk .
           docker run -d -p 8501:8501 --name credit-risk credit-risk
 EOF
+
