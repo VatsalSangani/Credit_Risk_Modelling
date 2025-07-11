@@ -59,7 +59,7 @@ This project focuses on building a predictive model to assess the credit risk as
 ---
 
 ## Model Comparison Results
-![Alt Text](https://github.com/VatsalSangani/Credit_Risk_Modelling/blob/main/.archive/Credit%20Risk%20Modelling%20Explanation.pdf)
+![Alt Text](https://github.com/VatsalSangani/Credit_Risk_Modelling/blob/main/.archive/Model%20Comparison%20Results.png)
 
 ## Deployment on EC2 Instance 
 [Click here to test the new deployed model](http://13.42.17.17:8501/)
