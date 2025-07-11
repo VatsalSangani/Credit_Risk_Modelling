@@ -1,0 +1,30 @@
+name: 🚀 Deploy Credit Risk App to EC2
+
+on:
+  push:
+    branches:
+      - main  # or master, depending on your repo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🔐 Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+
+      - name: 🚀 Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no deploy@13.42.17.17 << 'EOF'
+            cd Credit_Risk_Modelling/credit-risk
+            git pull origin main
+            docker stop credit-risk || true && docker rm credit-risk || true
+            docker build -t credit-risk-ui:latest .
+            docker run -d --name credit-risk -p 8501:8501 -p 8000:8000 credit-risk-ui:latest
+          EOF
