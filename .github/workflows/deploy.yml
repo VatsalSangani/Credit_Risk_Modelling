@@ -20,7 +20,7 @@ jobs:
 
     - name: 🚀 Deploy to EC2
       run: |
-        ssh -o StrictHostKeyChecking=no deploy@13.42.17.17 << 'EOF'
+        ssh -o StrictHostKeyChecking=no deploy@13.42.17.17 << EOF
           cd /home/deploy
 
           # If repo doesn't exist, clone it
