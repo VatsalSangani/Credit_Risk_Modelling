@@ -36,4 +36,6 @@ jobs:
 
           echo "🚀 Running new Docker container..."
           docker run -d -p 8000:8000 -p 8501:8501 --name credit-app credit-risk-ui:latest
+
+          exit 0
         EOF
