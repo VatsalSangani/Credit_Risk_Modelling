@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: credit-risk-app
+  labels:
+    app: credit-risk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: credit-risk
+  template:
+    metadata:
+      labels:
+        app: credit-risk
+    spec:
+      containers:
+      - name: credit-risk-container
+        image: credit-risk-ui:latest  # For local testing, replace with DockerHub image if pushing
+        ports:
+        - containerPort: 8501
+        - containerPort: 8000
