@@ -23,26 +23,29 @@ jobs:
         ssh -tt -o StrictHostKeyChecking=no deploy@13.42.17.17 <<EOF
         cd /home/deploy
 
-        # If repo doesn't exist, clone it
+        # Install git if missing
+        if ! command -v git &> /dev/null; then
+          sudo yum install -y git
+        fi
+
+        # Clone repo if not exists
         if [ ! -d "Credit_Risk_Modelling" ]; then
           git clone https://github.com/VatsalSangani/Credit_Risk_Modelling.git
         fi
 
         cd Credit_Risk_Modelling/credit-risk
 
-        # Pull latest code
+        # Pull latest changes
         git pull origin main
 
-        # Ensure Docker permissions
-        sudo usermod -aG docker \$USER || true
+        # Stop and remove old container if exists
+        docker stop credit-app 2>/dev/null || true
+        docker rm credit-app 2>/dev/null || true
 
-        # Clean up old Docker resources
-        docker stop \$(docker ps -aq) 2>/dev/null || true
-        docker rm \$(docker ps -aq) 2>/dev/null || true
-        docker rmi -f \$(docker images -q) 2>/dev/null || true
-        docker volume prune -f
+        # Remove old image if exists
+        docker rmi -f credit-risk-ui:latest 2>/dev/null || true
 
-        # Rebuild and run the new container
-        docker build -t credit-risk .
-        docker run -d -p 8501:8501 --name credit-risk credit-risk
+        # Rebuild and run container
+        docker build -t credit-risk-ui .
+        docker run -d -p 8000:8000 -p 8501:8501 --name credit-app credit-risk-ui
         EOF
