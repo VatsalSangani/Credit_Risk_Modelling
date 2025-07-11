@@ -20,29 +20,29 @@ jobs:
 
     - name: 🚀 Deploy to EC2
       run: |
-        ssh -tt -o StrictHostKeyChecking=no deploy@13.42.17.17 << EOF
-          cd /home/deploy
+        ssh -tt -o StrictHostKeyChecking=no deploy@13.42.17.17 <<EOF
+        cd /home/deploy
 
-          # If repo doesn't exist, clone it
-          if [ ! -d "Credit_Risk_Modelling" ]; then
-            git clone https://github.com/VatsalSangani/Credit_Risk_Modelling.git
-          fi
+        # If repo doesn't exist, clone it
+        if [ ! -d "Credit_Risk_Modelling" ]; then
+          git clone https://github.com/VatsalSangani/Credit_Risk_Modelling.git
+        fi
 
-          cd Credit_Risk_Modelling/credit-risk
+        cd Credit_Risk_Modelling/credit-risk
 
-          # Pull latest code
-          git pull origin main
+        # Pull latest code
+        git pull origin main
 
-          # Ensure Docker permissions
-          sudo usermod -aG docker \$USER || true
+        # Ensure Docker permissions
+        sudo usermod -aG docker \$USER || true
 
-          # Clean up old Docker resources
-          docker stop \$(docker ps -aq) 2>/dev/null || true
-          docker rm \$(docker ps -aq) 2>/dev/null || true
-          docker rmi -f \$(docker images -q) 2>/dev/null || true
-          docker volume prune -f
+        # Clean up old Docker resources
+        docker stop \$(docker ps -aq) 2>/dev/null || true
+        docker rm \$(docker ps -aq) 2>/dev/null || true
+        docker rmi -f \$(docker images -q) 2>/dev/null || true
+        docker volume prune -f
 
-          # Rebuild and run the new container
-          docker build -t credit-risk .
-          docker run -d -p 8501:8501 --name credit-risk credit-risk
-EOF
+        # Rebuild and run the new container
+        docker build -t credit-risk .
+        docker run -d -p 8501:8501 --name credit-risk credit-risk
+        EOF
