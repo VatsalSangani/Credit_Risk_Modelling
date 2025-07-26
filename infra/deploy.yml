@@ -1,0 +1,40 @@
+- name: 🚀 Deploy Credit Risk App
+  hosts: ec2
+  become: yes
+
+  tasks:
+    - name: Ensure git is installed
+      yum:
+        name: git
+        state: present
+
+    - name: Pull latest code from GitHub
+      git:
+        repo: https://github.com/VatsalSangani/Credit_Risk_Modelling.git
+        dest: /home/deploy/Credit_Risk_Modelling
+        force: yes
+
+    - name: Stop and remove existing container
+      shell: |
+        docker stop credit-app || true
+        docker rm credit-app || true
+      args:
+        executable: /bin/bash
+
+    - name: Remove old Docker image
+      shell: docker rmi -f credit-risk-ui:latest || true
+      args:
+        executable: /bin/bash
+
+    - name: Build new Docker image
+      shell: |
+        cd /home/deploy/Credit_Risk_Modelling/credit-risk
+        docker build -t credit-risk-ui:latest .
+      args:
+        executable: /bin/bash
+
+    - name: Run new Docker container
+      shell: |
+        docker run -d -p 8000:8000 -p 8501:8501 --name credit-app credit-risk-ui:latest
+      args:
+        executable: /bin/bash
