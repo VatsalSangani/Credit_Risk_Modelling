@@ -165,8 +165,6 @@ jobs:
 - ✅ Infrastructure-as-Code (Docker, Kubernetes YAMLs)
 - ✅ Code modularity & readability
 
-
-
 ---
 
 
