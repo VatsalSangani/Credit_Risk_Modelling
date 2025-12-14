@@ -63,31 +63,32 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 7. Deploy Docker via AWS CLI SSM Command (Includes clean deployment logic)
+      # 7. In your deploy.yml, inside the 'run' block
       - name: Deploy Docker via AWS CLI SSM Command
         run: |
           # Define necessary shell variables from GitHub Actions environment
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           CONTAINER_NAME="${{ env.CONTAINER_NAME }}"
+          OLD_IMAGE_TAG="credit-risk-ui:latest" # For historical cleanup
 
           DEPLOY_SCRIPT="#!/bin/bash\n \
-          # Log in to GHCR \n \
-          echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
           \n \
-          # 1. Clean Up: Stop container \n \
-          /usr/bin/docker stop \$CONTAINER_NAME 2>/dev/null || true\n \
+          # Log in to GHCR (Use sudo for full reliability in SSM environment) \n \
+          sudo echo ${{ secrets.GITHUB_TOKEN }} | sudo /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
           \n \
-          # 2. Clean Up: Remove container AND its volumes (-v) \n \
-          /usr/bin/docker rm -v \$CONTAINER_NAME 2>/dev/null || true\n \
+          # 1. ULTIMATE CLEAN UP: Forcefully remove the old container and its volumes \n \
+          # The '-f' flag handles stopping and removing, preventing the 'stuck container' trap. \n \
+          sudo /usr/bin/docker rm -fv \$CONTAINER_NAME 2>/dev/null || true\n \
           \n \
-          # 3. Clean Up: Remove local image (forces new pull) \n \
-          /usr/bin/docker rmi -f \$IMAGE_TAG 2>/dev/null || true\n \
+          # 2. Clean Up Old/New Images (forces fresh pull) \n \
+          sudo /usr/bin/docker rmi -f \$OLD_IMAGE_TAG 2>/dev/null || true\n \
+          sudo /usr/bin/docker rmi -f \$IMAGE_TAG 2>/dev/null || true\n \
           \n \
-          # 4. Pull new image \n \
-          /usr/bin/docker pull \$IMAGE_TAG\n \
+          # 3. Pull new image \n \
+          sudo /usr/bin/docker pull \$IMAGE_TAG\n \
           \n \
-          # 5. Run new container \n \
-          /usr/bin/docker run -d --name \$CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$IMAGE_TAG"
+          # 4. Run new container \n \
+          sudo /usr/bin/docker run -d --name \$CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$IMAGE_TAG"
 
           # Send the command using the AWS CLI. 
           aws ssm send-command \
