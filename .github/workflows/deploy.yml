@@ -18,8 +18,9 @@ jobs:
       REGISTRY: ghcr.io
       
       # --- APP 1: Credit Risk ---
-      # FIX: Use the 'lower()' function to ensure the repository name is entirely lowercase
-      CR_IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/${{ lower('credit_risk_modelling') }}:latest 
+      # FIX: Hardcode the repository name to be lowercase as required by Docker
+      # The owner part (github.repository_owner) is often automatically handled/lowercased by GHCR.
+      CR_IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/credit_risk_modelling:latest 
       CR_IMAGE_PATH: ./credit-risk 
       CR_CONTAINER_NAME: credit-app 
 
@@ -47,8 +48,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # FIX: Ensure the username part of the login is also lowercase, just in case
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.TOKEN_FOR_GHCR }} # Use a dedicated GHCR token secret if possible
           
       # ----------------------------------------------------------------------------------
       # APP 1: CREDIT RISK MODELLING DEPLOYMENT
@@ -61,7 +61,7 @@ jobs:
           context: ${{ env.CR_IMAGE_PATH }}
           file: ${{ env.CR_IMAGE_PATH }}/Dockerfile
           push: true
-          # Use the explicit, now guaranteed lowercase CR_IMAGE_TAG
+          # Use the explicit CR_IMAGE_TAG which we now hardcoded in the env block
           tags: ${{ env.CR_IMAGE_TAG }}
       
       # 5. Deploy Credit Risk via AWS CLI SSM Command
@@ -72,8 +72,8 @@ jobs:
           CR_IMAGE_TAG=${{ env.CR_IMAGE_TAG }}\n \
           CR_CONTAINER_NAME=${{ env.CR_CONTAINER_NAME }}\n \
           \n \
-          # Log in to GHCR\n \
-          echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u ${{ lower(github.repository_owner) }} --password-stdin\n \
+          # Log in to GHCR: Note: GHCR often accepts the actor's username as is.\n \
+          echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
           \n \
           # Clean Up and Remove Old Artifacts (Image, Container, and Volumes) \n \
           /usr/bin/docker stop \$CR_CONTAINER_NAME 2>/dev/null || true\n \
