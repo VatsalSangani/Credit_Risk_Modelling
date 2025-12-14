@@ -18,10 +18,10 @@ jobs:
       REGISTRY: ghcr.io
       
       # --- APP 1: Credit Risk ---
-      # Explicit TAG for guaranteed new image pull
-      CR_IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/credit_risk_modelling:latest 
+      # FIX: Use the 'lower()' function to ensure the repository name is entirely lowercase
+      CR_IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/${{ lower('credit_risk_modelling') }}:latest 
       CR_IMAGE_PATH: ./credit-risk 
-      CR_CONTAINER_NAME: credit-app # Define container name for clean use in run script
+      CR_CONTAINER_NAME: credit-app 
 
     steps:
       
@@ -47,6 +47,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
+          # FIX: Ensure the username part of the login is also lowercase, just in case
           password: ${{ secrets.GITHUB_TOKEN }}
           
       # ----------------------------------------------------------------------------------
@@ -60,23 +61,28 @@ jobs:
           context: ${{ env.CR_IMAGE_PATH }}
           file: ${{ env.CR_IMAGE_PATH }}/Dockerfile
           push: true
-          # Use the new, explicit CR_IMAGE_TAG
+          # Use the explicit, now guaranteed lowercase CR_IMAGE_TAG
           tags: ${{ env.CR_IMAGE_TAG }}
       
       # 5. Deploy Credit Risk via AWS CLI SSM Command
       - name: Deploy Credit Risk App
         run: |
           DEPLOY_SCRIPT="#!/bin/bash\n \
-          echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin\n \
+          # Set shell variables using the passed GitHub Actions environment variables\n \
+          CR_IMAGE_TAG=${{ env.CR_IMAGE_TAG }}\n \
+          CR_CONTAINER_NAME=${{ env.CR_CONTAINER_NAME }}\n \
+          \n \
+          # Log in to GHCR\n \
+          echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u ${{ lower(github.repository_owner) }} --password-stdin\n \
           \n \
           # Clean Up and Remove Old Artifacts (Image, Container, and Volumes) \n \
-          /usr/bin/docker stop ${{ env.CR_CONTAINER_NAME }} 2>/dev/null || true\n \
-          /usr/bin/docker rm -v ${{ env.CR_CONTAINER_NAME }} 2>/dev/null || true\n \
-          /usr/bin/docker rmi -f ${{ env.CR_IMAGE_TAG }} 2>/dev/null || true\n \
+          /usr/bin/docker stop \$CR_CONTAINER_NAME 2>/dev/null || true\n \
+          /usr/bin/docker rm -v \$CR_CONTAINER_NAME 2>/dev/null || true\n \
+          /usr/bin/docker rmi -f \$CR_IMAGE_TAG 2>/dev/null || true\n \
           \n \
           # Pull New Image and Run Container \n \
-          /usr/bin/docker pull ${{ env.CR_IMAGE_TAG }}\n \
-          /usr/bin/docker run -d --name ${{ env.CR_CONTAINER_NAME }} -p 8000:8000 -p 8501:8501 --restart unless-stopped ${{ env.CR_IMAGE_TAG }}"
+          /usr/bin/docker pull \$CR_IMAGE_TAG\n \
+          /usr/bin/docker run -d --name \$CR_CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$CR_IMAGE_TAG"
 
           aws ssm send-command \
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
