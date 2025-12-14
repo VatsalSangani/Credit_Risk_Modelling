@@ -6,12 +6,11 @@ on:
   # Enable manual runs in the GitHub Actions UI
   workflow_dispatch:
 
-# NEW PERMISSIONS BLOCK TO FIX PUSH ERROR
+# FIX 1: Grant permissions for pushing to GitHub Container Registry (GHCR)
 permissions:
-  contents: read     # Allows checkout of code
-  packages: write    # GRANTS permission to push the Docker image
-  # id-token: write  # (Optional, but good practice for other OIDC/security features)
-
+  contents: read
+  packages: write
+  
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -45,14 +44,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      # 5. Build and Push the Docker image (FIXED: Uses action for reliability)
+      # 5. Build and Push the Docker image (FIX 2: Corrected Dockerfile Path)
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          # Context tells Docker where to find the source code files
-          context: ./credit-risk 
-          # File specifies the path to the Dockerfile
-          file: ./credit-risk/Dockerfile # Assumes Dockerfile is in the repository root
+          context: ./credit-risk # Corrected build context based on file structure
+          file: ./credit-risk/Dockerfile # Corrected Dockerfile path
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
       
@@ -66,31 +63,32 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 7. Deploy Docker via AWS SSM Run Command (SECURE, SSH-FREE DEPLOYMENT)
+      # 7. Deploy Docker via AWS SSM Run Command (FIX 3 & 4: Secure SSM deployment with Bash fix)
       - name: Deploy Docker via AWS SSM Run Command
         uses: Castlenine/aws-ssm-command@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          instance-ids: ${{ secrets.EC2_INSTANCE_ID }} # Targets the instance by ID
-          user: 'root'
+          instance-ids: ${{ secrets.EC2_INSTANCE_ID }}
+          user: 'root' # Fixed execution user to prevent shell errors
           working-directory: '/home/ubuntu'
           
           # The deployment script to run on the EC2 instance
           command: |
+            #!/bin/bash # Forces execution with the working Bash shell
+            
             # 1. Login to GitHub Registry inside EC2
-            # GITHUB_TOKEN is passed securely as a secret
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u VatsalSangani --password-stdin
+            echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u VatsalSangani --password-stdin
             
             # 2. Pull the new image
             IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            docker pull $IMAGE_URI
+            /usr/bin/docker pull $IMAGE_URI
             
             # 3. Stop, remove, and start the new container
-            docker stop credit-app || true
-            docker rm credit-app || true
-            docker run -d \
+            /usr/bin/docker stop credit-app || true
+            /usr/bin/docker rm credit-app || true
+            /usr/bin/docker run -d \
               --name credit-app \
               -p 8000:8000 -p 8501:8501 \
               --restart unless-stopped \
