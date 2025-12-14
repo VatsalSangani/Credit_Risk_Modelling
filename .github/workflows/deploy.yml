@@ -74,7 +74,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
           instance-ids: ${{ secrets.EC2_INSTANCE_ID }} # Targets the instance by ID
-          user: 'ubuntu'
+          user: 'root'
           working-directory: '/home/ubuntu'
           
           # The deployment script to run on the EC2 instance
