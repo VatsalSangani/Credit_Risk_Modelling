@@ -1,41 +1,81 @@
-name: 🚀 Deploy Credit Risk App to EC2
+name: Deploy to EC2 (Cheap & Clean)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
-    - name: ⬇️ Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: 🔐 Set up SSH
-      uses: webfactory/ssh-agent@v0.8.0
-      with:
-        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+      # 1. Login to GitHub Container Registry (Free Storage)
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 🚀 Deploy to EC2
-      run: |
-        ssh -tt -o StrictHostKeyChecking=no deploy@13.42.17.17 << 'EOF'
-          cd ~/Credit_Risk_Modelling/credit-risk
-          git pull origin main
-          
-          echo "🧹 Stopping and removing previous credit-risk container..."
-          docker stop credit-app 2>/dev/null || true
-          docker rm credit-app 2>/dev/null || true
-          
-          echo "🧹 Removing previous credit-risk image..."
-          docker rmi -f credit-risk-ui:latest 2>/dev/null || true
-          
-          echo "📦 Building new Docker image..."
-          docker build -t credit-risk-ui:latest .
+      # 2. Build and Push the image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-          echo "🚀 Running new Docker container..."
-          docker run -d -p 8000:8000 -p 8501:8501 --name credit-app credit-risk-ui:latest
+      # 3. Configure AWS to allow access
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-          exit 0
-        EOF
+      # 4. Whitelist Runner IP (Solves your Timeout Issue!)
+      - name: Authorize GitHub Runner IP
+        run: |
+          IP=$(curl -s https://checkip.amazonaws.com)
+          echo "Adding IP $IP to Security Group ${{ secrets.EC2_SG_ID }}"
+          aws ec2 authorize-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} --protocol tcp --port 22 --cidr $IP/32
+
+      # 5. Deploy via SSH
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to GitHub Registry inside EC2
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull the new image
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
+            
+            # Restart the container
+            docker stop credit-app || true
+            docker rm credit-app || true
+            docker run -d \
+              --name credit-app \
+              -p 8000:8000 -p 8501:8501 \
+              --restart unless-stopped \
+              ghcr.io/${{ env.IMAGE_NAME }}:latest
+
+      # 6. Revoke Runner IP (Security Cleanup)
+      - name: Revoke GitHub Runner IP
+        if: always()
+        run: |
+          IP=$(curl -s https://checkip.amazonaws.com)
+          aws ec2 revoke-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} --protocol tcp --port 22 --cidr $IP/32
