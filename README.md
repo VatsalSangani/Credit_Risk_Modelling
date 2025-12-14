@@ -50,9 +50,9 @@ This project presents a robust **Credit Risk Prediction System** that leverages 
 
 ### 2️⃣ Exploratory Data Analysis (EDA)
 
-- Univariate and bivariate plots for insights
-- Correlation heatmaps
-- Class imbalance identification
+- Univariate and bivariate plots for insights.
+- Correlation heatmaps.
+- Class imbalance identification.
   
 
 ### 3️⃣ Model Training & Evaluation
