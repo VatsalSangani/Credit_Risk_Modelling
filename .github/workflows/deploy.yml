@@ -2,6 +2,7 @@ name: Deploy to EC2 (Cheap & Clean)
 
 on:
   push:
+    # Trigger deployment whenever code is pushed to the main branch
     branches: [ "main" ]
 
 env:
@@ -10,6 +11,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Grant necessary permissions for reading code and pushing to GHCR
     permissions:
       contents: read
       packages: write
@@ -18,15 +20,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Define a variable for the lowercase image name
+      # 1. Define Lowercase Image Name (Fixes "repository name must be lowercase" error)
       - name: Define Lowercase Image Name
         id: image_name_step
         run: |
-          # Convert the repository name to lowercase for GHCR
+          # Convert the repository name (e.g., VatsalSangani/Credit_Risk_Modelling) to lowercase for Docker/GHCR
           LOWERCASE_REPO_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_NAME=$LOWERCASE_REPO_NAME" >> $GITHUB_ENV
 
-      # 1. Login to GitHub Container Registry
+      # 2. Login to GitHub Container Registry (Free Storage)
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -34,16 +36,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. Build and Push the image
+      # 3. Build and Push the image (Fixes "Dockerfile: no such file or directory" error)
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          # Context: Specifies the folder containing the Dockerfile and the source code
+          context: ./credit-risk/ 
+          # File: Specifies the exact location of the Dockerfile relative to the context
+          file: ./credit-risk/Dockerfile 
           push: true
-          # Use the lowercase name and the latest tag
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      # 3. Configure AWS to allow access
+      # 4. Configure AWS to allow access (Needed for whitelisting the IP)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -51,29 +55,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 4. Whitelist Runner IP (Solves Timeout)
+      # 5. Whitelist Runner IP (Solves the "Connection timed out" error)
       - name: Authorize GitHub Runner IP
         run: |
           IP=$(curl -s https://checkip.amazonaws.com)
           echo "Adding IP $IP to Security Group ${{ secrets.EC2_SG_ID }}"
+          # Note: The EC2_SG_ID secret must be set!
           aws ec2 authorize-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} --protocol tcp --port 22 --cidr $IP/32
 
-      # 5. Deploy via SSH
+      # 6. Deploy to EC2 via SSH
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ubuntu # Check if your user is 'ubuntu' or 'ec2-user'
+          username: ubuntu # Ensure this is the correct user for your AMI (e.g., 'ec2-user' or 'ubuntu')
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Login to GitHub Registry inside EC2
+            # 1. Login to GitHub Registry inside EC2
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            # Pull the new image
+            # 2. Pull the new image
             IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
             docker pull $IMAGE_URI
             
-            # Restart the container
+            # 3. Stop, remove, and start the new container with the restart policy
             docker stop credit-app || true
             docker rm credit-app || true
             docker run -d \
@@ -82,7 +87,7 @@ jobs:
               --restart unless-stopped \
               $IMAGE_URI
 
-      # 6. Revoke Runner IP (Security Cleanup - Runs even if the deployment fails)
+      # 7. Revoke Runner IP (Security Cleanup - Runs even if deployment fails and fixes "argument --group-id: expected one argument" error)
       - name: Revoke GitHub Runner IP
         if: always()
         run: |
