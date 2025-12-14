@@ -3,7 +3,6 @@ name: Deploy to EC2 via AWS SSM
 on:
   push:
     branches: [ "main" ]
-  # Enable manual runs in the GitHub Actions UI
   workflow_dispatch:
 
 # FIX 1: Grant permissions for pushing to GitHub Container Registry (GHCR)
@@ -28,11 +27,11 @@ jobs:
 
       # --- Docker Build/Push Section ---
       
-      # 2. Set up QEMU (Recommended for multi-platform builds)
+      # 2. Set up QEMU
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       
-      # 3. Set up Docker BuildX (Enables advanced Docker features)
+      # 3. Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -55,41 +54,36 @@ jobs:
       
       # --- AWS SSM Deployment Section ---
 
-      # 6. Configure AWS credentials (Required for SSM command)
+      # 6. Configure AWS credentials (Using @v2 as previously discussed)
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 7. Deploy Docker via AWS SSM Run Command (FIX 3 & 4: Secure SSM deployment with Bash fix)
+      # 7. Deploy Docker via AWS SSM Run Command (FINAL FIX: Explicit SSM parameters)
       - name: Deploy Docker via AWS SSM Run Command
-        uses: Castlenine/aws-ssm-command@v1
+        uses: peter-evans/aws-ssm-send-command@v2 # Switched to a robust, configurable action
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
           instance-ids: ${{ secrets.EC2_INSTANCE_ID }}
-          user: 'root' # Fixed execution user to prevent shell errors
-          working-directory: '/home/ubuntu'
+          document-name: AWS-RunShellScript
           
-          # The deployment script to run on the EC2 instance
-          command: |
-            #!/bin/bash # Forces execution with the working Bash shell
-            
-            # 1. Login to GitHub Registry inside EC2
-            echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u VatsalSangani --password-stdin
-            
-            # 2. Pull the new image
-            IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            /usr/bin/docker pull $IMAGE_URI
-            
-            # 3. Stop, remove, and start the new container
-            /usr/bin/docker stop credit-app || true
-            /usr/bin/docker rm credit-app || true
-            /usr/bin/docker run -d \
-              --name credit-app \
-              -p 8000:8000 -p 8501:8501 \
-              --restart unless-stopped \
-              $IMAGE_URI
+          # CRITICAL FIX: Passing a structured command array to force execution with /bin/bash
+          parameters: |
+            commands: 
+              # Using #!/bin/bash as the first command to force the shell interpreter
+              - #!/bin/bash
+              - echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u VatsalSangani --password-stdin
+              - IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+              - /usr/bin/docker pull $IMAGE_URI
+              - /usr/bin/docker stop credit-app || true
+              - /usr/bin/docker rm credit-app || true
+              - /usr/bin/docker run -d --name credit-app -p 8000:8000 -p 8501:8501 --restart unless-stopped $IMAGE_URI
+            workingDirectory:
+              - /home/ec2-user # Correct home directory for Amazon Linux
+            executionTimeout:
+              - '1200'
