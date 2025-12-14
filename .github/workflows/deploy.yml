@@ -1,4 +1,4 @@
-name: Deploy Credit Risk to EC2 via AWS SSM
+name: Deploy to EC2 via AWS SSM
 
 on:
   push:
@@ -13,24 +13,49 @@ jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     
-    # Define environment variables
+    # Define environment variables used throughout the workflow
     env:
       REGISTRY: ghcr.io
+      # FIX: Hardcoded to ensure compliance with Docker's lowercase naming rules
+      IMAGE_NAME: vatsalsangani/credit_risk_modelling
+      CONTAINER_NAME: credit-app # Define container name for clean use in run script
       
-      # --- APP 1: Credit Risk ---
-      # FIX: Hardcode the repository name to be lowercase as required by Docker
-      # The owner part (github.repository_owner) is often automatically handled/lowercased by GHCR.
-      CR_IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/credit_risk_modelling:latest 
-      CR_IMAGE_PATH: ./credit-risk 
-      CR_CONTAINER_NAME: credit-app 
-
     steps:
       
       # 1. Checkout repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. AWS SSM Credential Setup
+      # --- Docker Build/Push Section ---
+      
+      # 2. Set up QEMU
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      # 3. Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 4. Log in to GitHub Container Registry (GHCR)
+      - name: Log in to the Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      # 5. Build and Push the Docker image 
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./credit-risk
+          file: ./credit-risk/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+      # --- AWS SSM Deployment Section ---
+
+      # 6. Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -38,56 +63,37 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 3. Docker Setup and Login
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Log in to the Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN_FOR_GHCR }} # Use a dedicated GHCR token secret if possible
-          
-      # ----------------------------------------------------------------------------------
-      # APP 1: CREDIT RISK MODELLING DEPLOYMENT
-      # ----------------------------------------------------------------------------------
-      
-      # 4. Build and Push the Credit Risk Docker image
-      - name: Build and push Credit Risk image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ env.CR_IMAGE_PATH }}
-          file: ${{ env.CR_IMAGE_PATH }}/Dockerfile
-          push: true
-          # Use the explicit CR_IMAGE_TAG which we now hardcoded in the env block
-          tags: ${{ env.CR_IMAGE_TAG }}
-      
-      # 5. Deploy Credit Risk via AWS CLI SSM Command
-      - name: Deploy Credit Risk App
+      # 7. Deploy Docker via AWS CLI SSM Command (Includes clean deployment logic)
+      - name: Deploy Docker via AWS CLI SSM Command
         run: |
+          # Define necessary shell variables from GitHub Actions environment
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          CONTAINER_NAME="${{ env.CONTAINER_NAME }}"
+
           DEPLOY_SCRIPT="#!/bin/bash\n \
-          # Set shell variables using the passed GitHub Actions environment variables\n \
-          CR_IMAGE_TAG=${{ env.CR_IMAGE_TAG }}\n \
-          CR_CONTAINER_NAME=${{ env.CR_CONTAINER_NAME }}\n \
-          \n \
-          # Log in to GHCR: Note: GHCR often accepts the actor's username as is.\n \
+          # Log in to GHCR \n \
           echo ${{ secrets.GITHUB_TOKEN }} | /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
           \n \
-          # Clean Up and Remove Old Artifacts (Image, Container, and Volumes) \n \
-          /usr/bin/docker stop \$CR_CONTAINER_NAME 2>/dev/null || true\n \
-          /usr/bin/docker rm -v \$CR_CONTAINER_NAME 2>/dev/null || true\n \
-          /usr/bin/docker rmi -f \$CR_IMAGE_TAG 2>/dev/null || true\n \
+          # 1. Clean Up: Stop container \n \
+          /usr/bin/docker stop \$CONTAINER_NAME 2>/dev/null || true\n \
           \n \
-          # Pull New Image and Run Container \n \
-          /usr/bin/docker pull \$CR_IMAGE_TAG\n \
-          /usr/bin/docker run -d --name \$CR_CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$CR_IMAGE_TAG"
+          # 2. Clean Up: Remove container AND its volumes (-v) \n \
+          /usr/bin/docker rm -v \$CONTAINER_NAME 2>/dev/null || true\n \
+          \n \
+          # 3. Clean Up: Remove local image (forces new pull) \n \
+          /usr/bin/docker rmi -f \$IMAGE_TAG 2>/dev/null || true\n \
+          \n \
+          # 4. Pull new image \n \
+          /usr/bin/docker pull \$IMAGE_TAG\n \
+          \n \
+          # 5. Run new container \n \
+          /usr/bin/docker run -d --name \$CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$IMAGE_TAG"
 
+          # Send the command using the AWS CLI. 
           aws ssm send-command \
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
-            --comment "GitHub Actions Deployment - Credit Risk" \
+            --comment "GitHub Actions Deployment" \
             --parameters "commands=['$DEPLOY_SCRIPT'],workingDirectory=['/home/ec2-user']" \
             --timeout-seconds 1200 \
             --output text
