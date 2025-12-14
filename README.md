@@ -2,7 +2,7 @@
 
 ## Description
 
-This project presents a robust **Credit Risk Prediction System** that leverages **Machine Learning** to assess the likelihood of loan default by an applicant. It integrates **data preprocessing**, **EDA**, **modeling**, and **evaluation** within a streamlined pipeline. To simulate real-world deployment, we’ve employed **Docker**, deployed the app on an **AWS EC2 instance**, and integrated **GitHub Actions CI/CD pipelines** This enables financial institutions to make data-driven, risk-averse lending decisions.
+This project presents a robust **Credit Risk Prediction System** that leverages **Machine Learning** to assess the likelihood of loan default by an applicant. It integrates **data preprocessing**, **EDA**, **modeling**, and **evaluation** within a streamlined pipeline. To simulate real-world deployment, we’ve employed **Docker**, deployed the app on an **AWS EC2 instance**, and integrated **GitHub Actions CI/CD pipelines** This enables financial institutions to make data-driven, risk-averse lending decisions..
 
 ![Credit Risk Demo](live-demo.gif)
 
