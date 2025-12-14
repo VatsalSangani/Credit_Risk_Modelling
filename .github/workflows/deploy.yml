@@ -6,6 +6,12 @@ on:
   # Enable manual runs in the GitHub Actions UI
   workflow_dispatch:
 
+# NEW PERMISSIONS BLOCK TO FIX PUSH ERROR
+permissions:
+  contents: read     # Allows checkout of code
+  packages: write    # GRANTS permission to push the Docker image
+  # id-token: write  # (Optional, but good practice for other OIDC/security features)
+
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
