@@ -44,9 +44,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           # Context tells Docker where to find the source code files
-          context: . # Assumes your files are in the repository root
+          context: ./credit-risk 
           # File specifies the path to the Dockerfile
-          file: ./Dockerfile # Assumes Dockerfile is in the repository root
+          file: ./credit-risk/Dockerfile # Assumes Dockerfile is in the repository root
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
       
