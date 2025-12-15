@@ -63,42 +63,39 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 7. Deploy Docker via AWS CLI SSM Command (Includes clean deployment logic)
+      # 7. Deploy Docker via AWS CLI SSM Command (The correct and final variable fix)
       - name: Deploy Docker via AWS CLI SSM Command
         run: |
-          # Define necessary shell variables from GitHub Actions environment
+          # Define necessary shell variables on the GITHUB RUNNER
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           CONTAINER_NAME="${{ env.CONTAINER_NAME }}"
           OLD_IMAGE_TAG="credit-risk-ui:latest"
           
-          # The DEPLOY_SCRIPT structure remains single-quoted for internal shell parsing
+          # The DEPLOY_SCRIPT uses $$ for all variables to be evaluated on the EC2 host.
           DEPLOY_SCRIPT="#!/bin/bash\n \
           \n \
-          # Log in to GHCR (Use sudo for full reliability in SSM environment) \n \
+          # Log in to GHCR \n \
           sudo echo ${{ secrets.GITHUB_TOKEN }} | sudo /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
           \n \
-          # 1. ULTIMATE CLEAN UP: Forcefully remove the old container and its volumes \n \
-          sudo /usr/bin/docker rm -fv \$CONTAINER_NAME 2>/dev/null || true\n \
+          # 1. ULTIMATE CLEAN UP: Forcefully remove the old container \n \
+          sudo /usr/bin/docker rm -fv \$\$CONTAINER_NAME 2>/dev/null || true\n \
           \n \
-          # 2. Clean Up Old/New Images (forces fresh pull) \n \
-          sudo /usr/bin/docker rmi -f \$OLD_IMAGE_TAG 2>/dev/null || true\n \
-          sudo /usr/bin/docker rmi -f \$IMAGE_TAG 2>/dev/null || true\n \
+          # 2. Clean Up Old/New Images \n \
+          sudo /usr/bin/docker rmi -f \$\$OLD_IMAGE_TAG 2>/dev/null || true\n \
+          sudo /usr/bin/docker rmi -f \$\$IMAGE_TAG 2>/dev/null || true\n \
           \n \
           # 3. Pull new image \n \
-          sudo /usr/bin/docker pull \$IMAGE_TAG\n \
+          sudo /usr/bin/docker pull \$\$IMAGE_TAG\n \
           \n \
-          # 4. Run new container \n \
-          sudo /usr/bin/docker run -d --name \$CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$IMAGE_TAG"
+          # 4. Run new container (Variables are now guaranteed to be correct) \n \
+          sudo /usr/bin/docker run -d --name \$\$CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$\$IMAGE_TAG"
 
-          # ----------------------------------------------------------------------
-          # FIX: Enclose the entire --parameters value in double quotes and ensure
-          # commands is treated as a JSON array of strings. This fixes the parsing error.
-          # ----------------------------------------------------------------------
-          
+          # Send the command using the robust JSON format (The CLI parsing fix)
           aws ssm send-command \
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
             --comment "GitHub Actions Deployment" \
             --parameters "{\"commands\":[\"$DEPLOY_SCRIPT\"],\"workingDirectory\":[\"/home/ec2-user\"]}" \
             --timeout-seconds 1200 \
+            --output text
             --output text
