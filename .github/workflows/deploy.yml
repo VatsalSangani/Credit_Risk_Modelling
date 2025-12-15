@@ -63,48 +63,52 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 7. Deploy Docker via AWS CLI SSM Command (UNIFIED INJECTION FIX)
+      # 7. Deploy Docker via AWS CLI SSM Command (JSON-SAFE VERSION)
       - name: Deploy Docker via AWS CLI SSM Command
         run: |
-          # --- 1. DEFINE VARIABLES ON GITHUB RUNNER ---
-          IMAGE_TAG_VALUE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          CONTAINER_NAME_VALUE="${{ env.CONTAINER_NAME }}"
-          OLD_IMAGE_TAG="credit-risk-ui:latest"
+          # --- 1. PREPARE SCRIPT CONTENT ---
+          # We write the script to a file first. This allows us to write normal bash
+          # without worrying about JSON escaping. We let the GitHub Runner expand the 
+          # variables ($IMAGE_TAG) right here, so the script is "baked" before sending.
           
-          # --- 2. DEFINE THE DEPLOYMENT SCRIPT TEMPLATE ---
-          # Use single quotes (') to prevent the runner's shell from evaluating any contents.
-          # Use unique placeholders (__TAG__) instead of $ variables.
-          DEPLOY_SCRIPT_TEMPLATE='#!/bin/bash\n \
-          \n \
-          # Log in to GHCR (Password from secrets.GITHUB_TOKEN) \n \
-          sudo echo ${{ secrets.GITHUB_TOKEN }} | sudo /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
-          \n \
-          # 1. ULTIMATE CLEAN UP: Forcefully remove the old container \n \
-          sudo /usr/bin/docker rm -fv __CONTAINER_NAME__ 2>/dev/null || true\n \
-          \n \
-          # 2. Clean Up Old/New Images to force fresh pull \n \
-          sudo /usr/bin/docker rmi -f __OLD_IMAGE_TAG__ 2>/dev/null || true\n \
-          sudo /usr/bin/docker rmi -f __IMAGE_TAG__ 2>/dev/null || true\n \
-          \n \
-          # 3. Pull new image \n \
-          sudo /usr/bin/docker pull __IMAGE_TAG__\n \
-          \n \
-          # 4. Run new container with port mapping \n \
-          sudo /usr/bin/docker run -d --name __CONTAINER_NAME__ -p 8000:8000 -p 8501:8501 --restart unless-stopped __IMAGE_TAG__'
+          cat <<EOF > deploy_script.sh
+          #!/bin/bash
+          set -e # Exit immediately if a command exits with a non-zero status
 
-          # --- 3. INJECT VARIABLES USING SED ---
-          # This creates the final, ready-to-execute script string.
-          INJECTED_SCRIPT=$(echo -e "${DEPLOY_SCRIPT_TEMPLATE}" | sed \
-            -e "s|__CONTAINER_NAME__|${CONTAINER_NAME_VALUE}|g" \
-            -e "s|__IMAGE_TAG__|${IMAGE_TAG_VALUE}|g" \
-            -e "s|__OLD_IMAGE_TAG__|${OLD_IMAGE_TAG}|g")
-          
-          # --- 4. SEND COMMAND VIA AWS CLI ---
-          # Uses the robust JSON parameter format and the single-line execution structure.
+          # Log in to GHCR
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # 1. Clean Up: Remove container (-f forces stop and remove)
+          sudo docker rm -fv ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+
+          # 2. Clean Up: Remove images to ensure fresh pull
+          sudo docker rmi -f credit-risk-ui:latest 2>/dev/null || true
+          sudo docker rmi -f ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 2>/dev/null || true
+
+          # 3. Pull new image
+          sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+          # 4. Run new container
+          sudo docker run -d \
+            --name ${{ env.CONTAINER_NAME }} \
+            -p 8000:8000 -p 8501:8501 \
+            --restart unless-stopped \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          EOF
+
+          # --- 2. GENERATE SAFE JSON PAYLOAD ---
+          # Use jq to read the script file and wrap it in a valid JSON structure.
+          # This handles all newlines and quotes automatically.
+          PARAMETERS=$(jq -n \
+            --arg cmd "$(cat deploy_script.sh)" \
+            --arg dir "/home/ec2-user" \
+            '{"commands": [$cmd], "workingDirectory": [$dir]}')
+
+          # --- 3. SEND COMMAND ---
           aws ssm send-command \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --comment "GitHub Actions Deployment" \
-            --parameters "{\"commands\":[\"$INJECTED_SCRIPT\"],\"workingDirectory\":[\"/home/ec2-user\"]}" \
+            --parameters "$PARAMETERS" \
             --timeout-seconds 1200 \
             --output text
