@@ -16,9 +16,8 @@ jobs:
     # Define environment variables used throughout the workflow
     env:
       REGISTRY: ghcr.io
-      # FIX: Hardcoded to ensure compliance with Docker's lowercase naming rules
       IMAGE_NAME: vatsalsangani/credit_risk_modelling
-      CONTAINER_NAME: credit-app # Define container name for clean use in run script
+      CONTAINER_NAME: credit-app
       
     steps:
       
@@ -44,14 +43,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      # 5. Build and Push the Docker image 
-      - name: Build and push Docker image
+      # 5. Build and Push the Docker image (FORCES NO-CACHE)
+      - name: Build and push Docker image (No Cache)
         uses: docker/build-push-action@v5
         with:
           context: ./credit-risk
           file: ./credit-risk/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          no-cache: true # Ensures a fresh image build every time
           
       # --- AWS SSM Deployment Section ---
 
@@ -63,39 +63,48 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 7. Deploy Docker via AWS CLI SSM Command (The correct and final variable fix)
+      # 7. Deploy Docker via AWS CLI SSM Command (UNIFIED INJECTION FIX)
       - name: Deploy Docker via AWS CLI SSM Command
         run: |
-          # Define necessary shell variables on the GITHUB RUNNER
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          CONTAINER_NAME="${{ env.CONTAINER_NAME }}"
+          # --- 1. DEFINE VARIABLES ON GITHUB RUNNER ---
+          IMAGE_TAG_VALUE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          CONTAINER_NAME_VALUE="${{ env.CONTAINER_NAME }}"
           OLD_IMAGE_TAG="credit-risk-ui:latest"
           
-          # The DEPLOY_SCRIPT uses $$ for all variables to be evaluated on the EC2 host.
-          DEPLOY_SCRIPT="#!/bin/bash\n \
+          # --- 2. DEFINE THE DEPLOYMENT SCRIPT TEMPLATE ---
+          # Use single quotes (') to prevent the runner's shell from evaluating any contents.
+          # Use unique placeholders (__TAG__) instead of $ variables.
+          DEPLOY_SCRIPT_TEMPLATE='#!/bin/bash\n \
           \n \
-          # Log in to GHCR \n \
+          # Log in to GHCR (Password from secrets.GITHUB_TOKEN) \n \
           sudo echo ${{ secrets.GITHUB_TOKEN }} | sudo /usr/bin/docker login ghcr.io -u ${{ github.actor }} --password-stdin\n \
           \n \
           # 1. ULTIMATE CLEAN UP: Forcefully remove the old container \n \
-          sudo /usr/bin/docker rm -fv \$\$CONTAINER_NAME 2>/dev/null || true\n \
+          sudo /usr/bin/docker rm -fv __CONTAINER_NAME__ 2>/dev/null || true\n \
           \n \
-          # 2. Clean Up Old/New Images \n \
-          sudo /usr/bin/docker rmi -f \$\$OLD_IMAGE_TAG 2>/dev/null || true\n \
-          sudo /usr/bin/docker rmi -f \$\$IMAGE_TAG 2>/dev/null || true\n \
+          # 2. Clean Up Old/New Images to force fresh pull \n \
+          sudo /usr/bin/docker rmi -f __OLD_IMAGE_TAG__ 2>/dev/null || true\n \
+          sudo /usr/bin/docker rmi -f __IMAGE_TAG__ 2>/dev/null || true\n \
           \n \
           # 3. Pull new image \n \
-          sudo /usr/bin/docker pull \$\$IMAGE_TAG\n \
+          sudo /usr/bin/docker pull __IMAGE_TAG__\n \
           \n \
-          # 4. Run new container (Variables are now guaranteed to be correct) \n \
-          sudo /usr/bin/docker run -d --name \$\$CONTAINER_NAME -p 8000:8000 -p 8501:8501 --restart unless-stopped \$\$IMAGE_TAG"
+          # 4. Run new container with port mapping \n \
+          sudo /usr/bin/docker run -d --name __CONTAINER_NAME__ -p 8000:8000 -p 8501:8501 --restart unless-stopped __IMAGE_TAG__'
 
-          # Send the command using the robust JSON format (The CLI parsing fix)
+          # --- 3. INJECT VARIABLES USING SED ---
+          # This creates the final, ready-to-execute script string.
+          INJECTED_SCRIPT=$(echo -e "${DEPLOY_SCRIPT_TEMPLATE}" | sed \
+            -e "s|__CONTAINER_NAME__|${CONTAINER_NAME_VALUE}|g" \
+            -e "s|__IMAGE_TAG__|${IMAGE_TAG_VALUE}|g" \
+            -e "s|__OLD_IMAGE_TAG__|${OLD_IMAGE_TAG}|g")
+          
+          # --- 4. SEND COMMAND VIA AWS CLI ---
+          # Uses the robust JSON parameter format and the single-line execution structure.
           aws ssm send-command \
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
             --comment "GitHub Actions Deployment" \
-            --parameters "{\"commands\":[\"$DEPLOY_SCRIPT\"],\"workingDirectory\":[\"/home/ec2-user\"]}" \
+            --parameters "{\"commands\":[\"$INJECTED_SCRIPT\"],\"workingDirectory\":[\"/home/ec2-user\"]}" \
             --timeout-seconds 1200 \
-            --output text
             --output text
