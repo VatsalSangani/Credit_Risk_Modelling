@@ -161,9 +161,9 @@ jobs:
 
 ## 👨‍💻 Industry Practices Followed
 - ✅ CI/CD pipeline with rollback capability.
-- ✅ Containerization for reproducibility
-- ✅ Infrastructure-as-Code (Docker, Kubernetes YAMLs)
-- ✅ Code modularity & readability
+- ✅ Containerization for reproducibility.
+- ✅ Infrastructure-as-Code (Docker, Kubernetes YAMLs).
+- ✅ Code modularity & readability.
 
 ---
 
