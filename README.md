@@ -155,7 +155,7 @@ jobs:
 ---
 
 ## 🌐Live Deployment on EC2 Instance 
-[Click here to test the new deployed model](http://13.42.17.17:8501/)
+[Click here to test the new deployed model](http://18.171.75.241:8501/)
 
 ---
 
