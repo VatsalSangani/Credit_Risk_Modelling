@@ -1,0 +1,8 @@
+﻿terraform/
+k8s/
+infra/
+__pycache__/
+*.pyc
+.venv/
+*.exe
+*.dll
