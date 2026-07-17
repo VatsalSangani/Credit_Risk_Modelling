@@ -248,8 +248,7 @@ Open **http://localhost:8501**
 | Cloud | Service | Status |
 |---|---|---|
 | GCP | Cloud Run | ✅ Live |
-| Azure | App Service F1 via Terraform | 📄 IaC ready, blocked by quota |
-| AWS | EC2 + GitHub Actions | ✅ Previously deployed |
+
 
 ---
 
