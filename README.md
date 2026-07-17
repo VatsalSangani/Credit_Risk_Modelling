@@ -186,26 +186,6 @@ gcloud run deploy credit-risk \
   --clear-base-image
 ```
 
-### IaC: Terraform for Azure App Service F1
-
-Terraform configuration in `terraform/` provisions:
-- Azure Resource Group
-- App Service Plan (F1 — free tier)
-- Linux Web App (Python 3.11)
-
-```bash
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-> Note: Azure F1 free tier has regional quota restrictions on new accounts. The Terraform code is production-ready; deployment was blocked by Azure's `Current Limit (Total VMs): 0` restriction in available regions.
-
-### Previous: AWS EC2 via GitHub Actions
-
-Originally deployed on AWS EC2 (Amazon Linux) with GitHub Actions CI/CD — automated Docker build and deploy on every push to main.
-
 ---
 
 ## Local Setup
@@ -242,6 +222,17 @@ Open **http://localhost:8501**
 | Language | Python 3.11 |
 
 ---
+
+## Model Comparison
+
+9 models evaluated on held-out test set (6,517 samples):
+
+![Model Comparison](.archive/Model%20Comparison%20Results.png)
+
+XGBoost selected as final model for highest accuracy (93.5%) and recall (93.5%). LightGBM competitive on precision (93.6%).
+
+---
+
 
 ## Cloud Coverage
 
